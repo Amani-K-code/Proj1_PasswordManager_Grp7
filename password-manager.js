@@ -1,21 +1,59 @@
 "use strict";
 
+/**
+ *  SECURE PASSWORD MANAGER (Keychain)
+ * 
+ * =========================================================================
+ * - Your MASTER PASSWORD is the key to "vault"
+ * - PBKDF2 turns password into a strong master key
+ * 
+ * - From the master key , TWO sub -keys:
+ *   - hmacKey -> scrambles the LABELS on the boxes (domain names)
+ *   - aesKey -> locks the CONTENTS of each box (password entries)
+ * 
+ * - Every box has the same size (padding), so nobody cant tell the length of the stored passwords
+ * - Each box is tied to its own label (AAD), so swapping boxes is detected.
+ * - A receipt (SHA-256 checksum) kept somewhere safe lets us notice if someone replaced the whole vault with an OLD copy(rollback)
+ * 
+ * =========================================================================
+ */
+
 /********* External Imports ********/
 
+// External libraries and utilities for cryptographic operations
+// Helper functions from starter code (string <-> bytes <-> Base64, random bytes)
 const { stringToBuffer, bufferToString, encodeBuffer, decodeBuffer, getRandomBytes } = require("./lib");
+
+
+// SubtleCrypto: Node's built-in, well-tested crypto library (Not invented by us(No self generated crypto))
 const { subtle } = require('crypto').webcrypto;
 
 /********* Constants ********/
 
 const PBKDF2_ITERATIONS = 100000; // number of iterations for PBKDF2 algorithm
 const MAX_PASSWORD_LENGTH = 64;   // we can assume no password is longer than this many characters
+const PADDED_SIZE = MAX_PASSWORD_LENGTH +1; // every plaintext becomes exactly 65 bytes (1 length byte + 64 daata bytes)
 const CANARY_TEXT = "keychain-password-check"; //known plaintext used to verify the password
 
-/**MOCK UP code for Albert's part to test the functionality */
+
+
+
+
+/**
+ * ==========================================================================
+ * HELPER 1: Key derivation
+ * 
+ * deriveKeys(password, salt)
+ *      Turns (master passowrd + salt) into TWO independent keys.
+ *      Only ONE slow PBKDF2 call happens here (spec requirement)
+ *      Returns { hmacKey, aesKey }.
+ */
 
 // Thoraway: stands in for Person1 - key derivation
 async function deriveKeys(password, salt) {
   // 1. Wrap the raw password so PBKDF2 can use it.
+  // "raw" = plain bytes, "PBKDF2" = only usable for PBKDF2, false = not exportale
+  // ["derieKey"] = the only thing this key may do is derive other keys.
 
   const raw = await subtle.importKey(
     "raw",
@@ -26,6 +64,8 @@ async function deriveKeys(password, salt) {
   );
 
   // 2 THE ONE slow PBKDF2 call: password + salt -> a 256-bit master key
+  // The salt makes every user's key different, even with identical pw
+  // Atacker cannot reuse one dictionary attack against everybody.
   const master = await subtle.deriveKey(
     {name: "PBKDF2", salt: salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
     raw,
