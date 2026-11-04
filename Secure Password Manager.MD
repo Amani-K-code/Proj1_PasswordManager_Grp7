@@ -1,6 +1,6 @@
 # Secure Password Manager
 
-**Course:** ICS 3201 Computer Security, Programming Assignment 1
+**Course:** ICS 3201 Computer Security
 **Files covered:** `password-manager.js` (the graded file), `demo.js` (the presentation script), `lib.js` (helpers)
 
 > **How to view the diagrams:** the flow charts below are written in Mermaid.
