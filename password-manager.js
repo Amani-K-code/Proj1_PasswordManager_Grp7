@@ -72,22 +72,37 @@ async function deriveKeys(password, salt) {
     { name: "HMAC", hash: "SHA-256", length: 256 },
     false, ["sign"]);
 
-  // 3 Use HMAC as a PRF: signing2 different lavels to get two independent sub-keys
+  // 3 Use HMAC as a PRF: signing two different levels to get two independent random sub-keys.
   const hmacBits = await subtle.sign("HMAC", master, stringToBuffer("domain-hmac-key"));
   const aesBits = await subtle.sign("HMAC", master, stringToBuffer("aes-gcm-key"));
 
   // 4 Import raw bytes as proper Cryptokeys, each limited to 1 job
+
+  // Used to hide domain names via HMAC
   const hmacKey = await subtle.importKey(
     "raw", hmacBits, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+
+  // Used for encrypting/decrypting stored passwords
   const aesKey = await subtle.importKey(
     "raw", aesBits, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
   return { hmacKey, aesKey };
 }
 
-// Throwaway: the "canary", an encrypted known string stored in the dump.
-// Decrypting it later proves the pw is right, and reveals nothing about it.
+
+
+
+/** ========================== Helper 2: the password "canary" ==================
+ * 
+ * makeCanary(asKey)
+ * 
+ *  Encrypts a KNOWN sentence. On load(), if we can decrypt it back, the
+ *   password was right. A wrong password gives a wrong key, so AES-GCM's
+ *   authentication check fails and decrypt throws.
+ *   (Like the canary in a coal mine: it tells us when the air is bad.)
+ *   Nothing about the password itself is stored.
+ */
 async function makeCanary(aesKey) {
-  const iv = getRandomBytes(12); // fresh random IV every time(for GCM)
+  const iv = getRandomBytes(12); // fresh random 12 byte IV every time(for GCM)
   const ct = await subtle.encrypt(
     { name: "AES-GCM", iv: iv, additionalData: stringToBuffer("canary") },
      aesKey, stringToBuffer(CANARY_TEXT));
@@ -96,6 +111,48 @@ async function makeCanary(aesKey) {
 
 
 
+/** ===================== Helper 3: padding (hides password length) ===========
+ * 
+ * padValue(value)
+ *  Makes every password the same size before encryption
+ * Layout: [1 byte : real length ][ the password bytes ] [ sero filler....]
+ * Total is always 65 bytes -> every ciphertext has the same length,
+ * so an attacker learns nothing about how long the password is.
+ */
+
+function padValue(value){
+  const bytes = new Uint8Array(stringToBuffer(value));
+  if (bytes.length > MAX_PASSWORD_LENGTH) {
+    throw "Password too long (max " + MAX_PASSWORD_LENGTH + " bytes)";
+  }
+
+  const padded = new Uint8Array(PADDED_SIZE); // start filled with zeros
+  padded[0] = bytes.length; // first byte is the real length
+  padded.set(bytes, 1); // copy the password bytes after the length byte
+  return padded;
+
+}
+
+
+/**
+ * 
+ * unpadValue(buffer)
+ *  Reverse of padValue: read the length byte, return only the real password.
+ * 
+ */
+function unpadValue(buffer){
+  const padded = new Uint8Array(buffer);
+  const length = padded[0];
+  return bufferToString(padded.slice(1, 1 + length));
+}
+
+
+
+
+
+
+
+// ============================= Keychain ===========================================
   /********* Implementation ********/
 class Keychain {
   /**
@@ -110,6 +167,14 @@ class Keychain {
     this.data = data;
     this.secrets = secrets;
   }
+
+
+  /* ------------------------------ init() ------------------------------ */
+  /**
+   * Creates an EMPTY keychain protected by the given master password.
+   * Arguments:   password: string
+   * Return Type: Promise<Keychain>
+   */
 
   static async init(password) {
     const salt = getRandomBytes(16);
@@ -127,6 +192,14 @@ class Keychain {
     * Return Type: void
     */
   
+
+
+
+
+
+
+
+  /**================================== load ============================== */
 
   /**
     * Loads the keychain state from the provided representation (repr). The
@@ -186,6 +259,15 @@ class Keychain {
       keys);
   };
 
+
+
+
+
+
+
+
+
+  /** ========================= dump() =============================== */
   /**
     * Returns a JSON serialization of the contents of the keychain that can be 
     * loaded back using the load function. The return value should consist of
@@ -228,6 +310,9 @@ class Keychain {
 
   };
 
+
+
+  /**  ---------------------- get() ---------------------------------- */
   /**
     * Fetches the data (as a string) corresponding to the given domain from the KVS.
     * If there is no entry in the KVS that matches the given domain, then return
@@ -239,9 +324,6 @@ class Keychain {
     */
 
 
-  /**MOCK UP code for Ivan's part for testing the functionality */
-  // Person 2 
-
   async get(name) {
     // throw "Not Implemented!";
     const tag = encodeBuffer(await subtle.sign("HMAC", this.secrets.hmacKey, stringToBuffer(name)));
@@ -251,12 +333,15 @@ class Keychain {
       const pt = await subtle.decrypt(
         { name: "AES-GCM", iv: decodeBuffer(rec.iv), additionalData: stringToBuffer(tag) },
         this.secrets.aesKey, decodeBuffer(rec.ct));
-      return bufferToString(pt);
+      return unpadValue(pt);
     } catch (e) {
       throw "Tampering detected"; // GCM auth failed
     }
   };
 
+  
+  // --------------------------- set() -----------------------------------
+  
   /** 
   * Inserts the domain and associated data into the KVS. If the domain is
   * already in the password manager, this method should update its value. If
@@ -269,15 +354,26 @@ class Keychain {
   */
 
   async set(name, value) {
-    // throw "Not Implemented!";
+    // 1) Hide the domain: the kvs key is the HMAC tag
     const tag = encodeBuffer(await subtle.sign("HMAC", this.secrets.hmacKey, stringToBuffer(name)));
+
+    // 2) Hide the length: pad the password to a fixed 65 bytes
+    const padded = padValue(value);
+
+    // 3) Encrypt with a fresh random IV; the tag is the additionalData (swap defense)
     const iv = getRandomBytes(12);
     const ct = await subtle.encrypt(
       { name: "AES-GCM", iv: iv, additionalData: stringToBuffer(tag) },
-      this.secrets.aesKey, stringToBuffer(value));
-      this.data.kvs[tag] = { iv: encodeBuffer(iv), ct: encodeBuffer(ct) };
+      this.secrets.aesKey, padded);
+
+    // 4) Store (adds a new entry or overwrites an existing one)
+    this.data.kvs[tag] = { iv: encodeBuffer(iv), ct: encodeBuffer(ct) };
   };
 
+  
+  
+  
+  // ------------------ remove () --------------------------------------
   /**
     * Removes the record with name from the password manager. Returns true
     * if the record with the specified name is removed, false otherwise.
