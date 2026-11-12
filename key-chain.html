@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secure Keychain Lab</title>
+<style>
+:root{color-scheme:dark;--t:#f5f5f7;--m:#b4b4c0;--ok:#32d74b;--bad:#ff453a;--warn:#ffd60a;--ac:#0a84ff;--bd:rgba(255,255,255,.2)}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--t);background:#0a0c1c;font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Display","Inter","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.bg{position:fixed;inset:0;z-index:-1;background:
+radial-gradient(38% 42% at 12% 18%,rgba(94,92,230,.75),transparent 70%),
+radial-gradient(34% 40% at 88% 12%,rgba(10,132,255,.7),transparent 70%),
+radial-gradient(40% 45% at 75% 92%,rgba(255,55,95,.55),transparent 70%),
+radial-gradient(32% 36% at 8% 88%,rgba(48,209,88,.4),transparent 70%)}
+.wrap{max-width:1120px;margin:0 auto;padding:40px 20px 70px}
+h1{font-size:clamp(32px,5vw,52px);letter-spacing:-.03em;margin:0 0 8px;font-weight:700}
+h2{font-size:19px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--m);max-width:62ch;margin:0 0 22px}
+.glass{background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.04));border:1px solid var(--bd);border-radius:26px;padding:22px;backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);box-shadow:0 14px 44px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.4),inset 0 -1px 0 rgba(255,255,255,.06)}
+.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));margin-bottom:18px}
+.step{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(160deg,#4aa3ff,#0a6cff);font-weight:700;font-size:14px;margin-right:10px;box-shadow:0 2px 8px rgba(10,132,255,.6),inset 0 1px 0 rgba(255,255,255,.5)}
+.head{display:flex;align-items:center;margin-bottom:6px}
+p.d{color:var(--m);margin:0 0 14px;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.chip{padding:7px 14px;border-radius:999px;font-size:13px;border:1px solid var(--bd);background:rgba(255,255,255,.07);color:var(--m);transition:.4s}
+.chip.on{color:#fff;background:rgba(50,215,75,.28);border-color:rgba(50,215,75,.7);box-shadow:0 0 18px rgba(50,215,75,.35)}
+input[type=text],input[type=password]{width:100%;padding:11px 14px;margin-bottom:10px;border-radius:14px;border:1px solid var(--bd);background:rgba(0,0,0,.28);color:var(--t);font:inherit;outline:none;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)}
+input:focus-visible,button:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+button{cursor:pointer;border:1px solid rgba(255,255,255,.25);color:#fff;font:inherit;font-weight:600;padding:9px 16px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.07));box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 4px 12px rgba(0,0,0,.25);transition:transform .15s,filter .15s}
+button:hover{filter:brightness(1.2)}button:active{transform:scale(.96)}
+button.p{background:linear-gradient(180deg,#4aa3ff,#0a6cff);border-color:rgba(255,255,255,.35)}
+button.r{background:linear-gradient(180deg,#ff6a5f,#e0362b)}
+pre{margin:0;padding:12px;border-radius:14px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);font:12px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:#cfe3ff;max-height:190px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+table{width:100%;border-collapse:collapse;font:12px ui-monospace,Menlo,Consolas,monospace;color:#cfe3ff}
+th{text-align:left;color:var(--m);font:600 12px -apple-system,"Segoe UI",sans-serif;padding:4px 6px}
+td{padding:4px 6px;border-top:1px solid rgba(255,255,255,.1)}
+.cnt{color:var(--m);font-size:13px;margin:8px 0 0}
+.atk{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.a{padding:16px;border-radius:20px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.12)}
+.a h3{margin:0 0 4px;font-size:15px}.a p{margin:0 0 12px;color:var(--m);font-size:13px}
+.badge{display:block;margin-top:10px;font-size:13px;min-height:20px}
+.badge.ok{color:var(--ok)}.badge.bad{color:var(--bad)}
+#log{max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.l{display:flex;gap:10px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.06);font-size:14px}
+.l b{width:16px;flex:none;text-align:center}
+.l.ok b{color:var(--ok)}.l.bad b{color:var(--bad)}.l.w b{color:var(--warn)}.l.i b{color:var(--ac)}
+label.ck{display:flex;gap:8px;align-items:center;color:var(--m);font-size:14px;margin-bottom:12px}
+.note{color:var(--m);font-size:12.5px;margin-top:22px;text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="wrap">
+  <h1>Secure Keychain Lab</h1>
+  <p class="sub">Set up a locker room with a master password, pack it up, reopen it, then try to break in. Everything runs live in your browser.</p>
+
+  <div class="chips">
+    <span class="chip" data-s="kdf">Strong master key</span>
+    <span class="chip" data-s="lab">Hidden website names</span>
+    <span class="chip" data-s="pad">Hidden password length</span>
+    <span class="chip" data-s="swap">Lockers can't be swapped</span>
+    <span class="chip" data-s="roll">Old copies are caught</span>
+    <span class="chip" data-s="tam">Tamper alarm</span>
+  </div>
+
+  <div class="grid">
+    <section class="glass">
+      <div class="head"><span class="step">1</span><h2>Set up your locker room</h2></div>
+      <p class="d">Your master password becomes the one key to the locker room. Choose one you can remember.</p>
+      <input type="password" id="pw" placeholder="Master password" value="correct horse battery">
+      <div class="row"><button class="p" id="bInit">Set up locker room</button></div>
+      <pre id="vault">No locker room yet.</pre>
+    </section>
+
+    <section class="glass">
+      <div class="head"><span class="step">2</span><h2>Use your lockers</h2></div>
+      <p class="d">Each website gets a hidden locker number. Each password sits in its own locked locker, and all lockers are the same size.</p>
+      <input type="text" id="dom" placeholder="Website, e.g. www.google.com" value="www.google.com">
+      <input type="text" id="val" placeholder="Password to store (up to 64 characters)" value="hunter2">
+      <div class="row"><button class="p" id="bSet">Store</button><button id="bGet">Open locker</button><button class="r" id="bRem">Empty locker</button></div>
+      <table><thead><tr><th>Locker number</th><th>Size</th></tr></thead><tbody id="rows"></tbody></table>
+      <p class="cnt" id="count">0 lockers in use</p>
+    </section>
+
+    <section class="glass">
+      <div class="head"><span class="step">3</span><h2>Pack up and keep a receipt</h2></div>
+      <p class="d">Packing up saves your locker room for later. You also get a receipt to keep somewhere safe.</p>
+      <div class="row"><button class="p" id="bDump">Pack up</button></div>
+      <pre id="dumpOut">Nothing packed yet.</pre>
+      <p class="cnt">Your receipt (keep it somewhere safe):</p>
+      <pre id="sum">-</pre>
+    </section>
+
+    <section class="glass">
+      <div class="head"><span class="step">4</span><h2>Reopen the locker room</h2></div>
+      <p class="d">Try the right password, then a wrong one, with and without your receipt.</p>
+      <input type="password" id="lpw" placeholder="Master password" value="correct horse battery">
+      <label class="ck"><input type="checkbox" id="useSum" checked> Check against my receipt</label>
+      <div class="row"><button class="p" id="bLoad">Open saved locker room</button></div>
+    </section>
+  </div>
+
+  <section class="glass" style="margin-bottom:18px">
+    <div class="head"><span class="step">5</span><h2>Attack lab</h2></div>
+    <p class="d">Each button plays the attacker against a fresh locker room. A green result means the attack was stopped.</p>
+    <div class="atk">
+      <div class="a"><h3>Swap two lockers</h3><p>Switch two lockers, with no receipt available.</p><button id="a1">Run attack</button><span class="badge" id="r1"></span></div>
+      <div class="a"><h3>Old copy</h3><p>Put back an older copy of the locker room.</p><button id="a2">Run attack</button><span class="badge" id="r2"></span></div>
+      <div class="a"><h3>Damage a locker</h3><p>Secretly change one locker's contents.</p><button id="a3">Run attack</button><span class="badge" id="r3"></span></div>
+      <div class="a"><h3>Guess the password</h3><p>Try a wrong password on an empty locker room.</p><button id="a4">Run attack</button><span class="badge" id="r4"></span></div>
+      <div class="a"><h3>Check password lengths</h3><p>Compare a 1 and a 64 character password.</p><button id="a5">Run test</button><span class="badge" id="r5"></span></div>
+    </div>
+  </section>
+
+  <section class="glass">
+    <h2>Activity</h2>
+    <p class="d">Every action and its result appears here, newest first.</p>
+    <div id="log"></div>
+  </section>
+
+  <p class="note">Educational demo. It is not a replacement for a real password manager.</p>
+</div>
+
+<script>
+"use strict";
+/* ---------- helpers (browser versions of lib.js) ---------- */
+const enc = new TextEncoder(), dec = new TextDecoder();
+const stringToBuffer = s => enc.encode(s);
+const bufferToString = b => dec.decode(b);
+const encodeBuffer = b => { let s = ""; new Uint8Array(b).forEach(x => s += String.fromCharCode(x)); return btoa(s); };
+const decodeBuffer = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const getRandomBytes = n => crypto.getRandomValues(new Uint8Array(n));
+const subtle = crypto.subtle;
+
+/* ---------- constants ---------- */
+const PBKDF2_ITERATIONS = 100000;
+const MAX_PASSWORD_LENGTH = 64;
+const PADDED_SIZE = MAX_PASSWORD_LENGTH + 1;   // 1 length byte + 64 data bytes
+const CANARY_TEXT = "keychain-password-check";
+
+/* ---------- key derivation: password + salt -> hmacKey + aesKey ---------- */
+async function deriveKeys(password, salt) {
+  const raw = await subtle.importKey("raw", stringToBuffer(password), { name: "PBKDF2" }, false, ["deriveKey"]);
+  const master = await subtle.deriveKey(
+    { name: "PBKDF2", salt: salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    raw, { name: "HMAC", hash: "SHA-256", length: 256 }, false, ["sign"]);
+  const hmacBits = await subtle.sign("HMAC", master, stringToBuffer("domain-hmac-key"));
+  const aesBits = await subtle.sign("HMAC", master, stringToBuffer("aes-gcm-key"));
+  const hmacKey = await subtle.importKey("raw", hmacBits, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const aesKey = await subtle.importKey("raw", aesBits, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  return { hmacKey, aesKey };
+}
+
+/* ---------- canary: a locked known sentence that proves the password ---------- */
+async function makeCanary(aesKey) {
+  const iv = getRandomBytes(12);
+  const ct = await subtle.encrypt({ name: "AES-GCM", iv, additionalData: stringToBuffer("canary") }, aesKey, stringToBuffer(CANARY_TEXT));
+  return { iv: encodeBuffer(iv), ct: encodeBuffer(ct) };
+}
+
+/* ---------- padding: every password becomes exactly 65 bytes ---------- */
+function padValue(value) {
+  const bytes = stringToBuffer(value);
+  if (bytes.length > MAX_PASSWORD_LENGTH) throw "Password too long (max " + MAX_PASSWORD_LENGTH + " bytes)";
+  const padded = new Uint8Array(PADDED_SIZE);
+  padded[0] = bytes.length;
+  padded.set(bytes, 1);
+  return padded;
+}
+function unpadValue(buffer) {
+  const p = new Uint8Array(buffer);
+  return bufferToString(p.slice(1, 1 + p[0]));
+}
+
+/* ---------- the Keychain ---------- */
+class Keychain {
+  constructor(data, secrets) { this.data = data; this.secrets = secrets; } // data = public, secrets = keys
+
+  static async init(password) {
+    const salt = getRandomBytes(16);
+    const keys = await deriveKeys(password, salt);
+    return new Keychain({ salt: encodeBuffer(salt), check: await makeCanary(keys.aesKey), kvs: {} }, keys);
+  }
+
+  static async load(password, repr, trustedDataCheck) {
+    if (trustedDataCheck !== undefined && trustedDataCheck !== null) {       // rollback defense
+      const actual = encodeBuffer(await subtle.digest("SHA-256", stringToBuffer(repr)));
+      if (actual !== trustedDataCheck) throw "Integrity check failed: data was tampered with or rolled back";
+    }
+    const parsed = JSON.parse(repr);
+    const keys = await deriveKeys(password, decodeBuffer(parsed.salt));       // the only PBKDF2 call
+    let plain;
+    try {                                                                     // password check via canary
+      plain = await subtle.decrypt(
+        { name: "AES-GCM", iv: decodeBuffer(parsed.check.iv), additionalData: stringToBuffer("canary") },
+        keys.aesKey, decodeBuffer(parsed.check.ct));
+    } catch (e) { throw "Invalid password (or corrupted data)"; }
+    if (bufferToString(plain) !== CANARY_TEXT) throw "Invalid password (or corrupted data)";
+    return new Keychain({ salt: parsed.salt, check: parsed.check, kvs: parsed.kvs }, keys);
+  }
+
+  async dump() {
+    const repr = JSON.stringify({ salt: this.data.salt, check: this.data.check, kvs: this.data.kvs }); // never the keys
+    const digest = await subtle.digest("SHA-256", stringToBuffer(repr));
+    return [repr, encodeBuffer(digest)];
+  }
+
+  async tag(name) { return encodeBuffer(await subtle.sign("HMAC", this.secrets.hmacKey, stringToBuffer(name))); }
+
+  async get(name) {
+    const tag = await this.tag(name);
+    const rec = this.data.kvs[tag];
+    if (rec === undefined) return null;
+    try {
+      const pt = await subtle.decrypt({ name: "AES-GCM", iv: decodeBuffer(rec.iv), additionalData: stringToBuffer(tag) },
+        this.secrets.aesKey, decodeBuffer(rec.ct));
+      return unpadValue(pt);
+    } catch (e) { throw "Tampering detected"; }
+  }
+
+  async set(name, value) {
+    const tag = await this.tag(name);
+    const padded = padValue(value);
+    const iv = getRandomBytes(12);
+    const ct = await subtle.encrypt({ name: "AES-GCM", iv, additionalData: stringToBuffer(tag) }, this.secrets.aesKey, padded);
+    this.data.kvs[tag] = { iv: encodeBuffer(iv), ct: encodeBuffer(ct) };
+  }
+
+  async remove(name) {
+    const tag = await this.tag(name);
+    if (this.data.kvs[tag] === undefined) return false;
+    delete this.data.kvs[tag];
+    return true;
+  }
+}
+
+/* ---------- UI plumbing ---------- */
+const $ = id => document.getElementById(id);
+let kc = null, saved = null;
+const secretsTyped = new Set();
+const short = (s, n = 14) => s.slice(0, n) + "…";
+const shield = k => document.querySelector('[data-s="' + k + '"]').classList.add("on");
+function log(t, m) {
+  const d = document.createElement("div");
+  d.className = "l " + t;
+  d.innerHTML = "<b>" + { ok: "✓", bad: "✕", w: "!", i: "•" }[t] + "</b><span></span>";
+  d.lastChild.textContent = m;
+  $("log").prepend(d);
+}
+async function attempt(fn) { try { return { v: await fn() }; } catch (e) { return { e: String(e) }; } }
+function needVault() { if (!kc) { log("w", "Set up your locker room first (step 1)."); return true; } return false; }
+function render() {
+  const rows = $("rows"); rows.innerHTML = "";
+  const e = kc ? Object.entries(kc.data.kvs) : [];
+  for (const [k, v] of e) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + short(k) + "</td><td>" + decodeBuffer(v.ct).length + " units</td>";
+    rows.appendChild(tr);
+  }
+  $("count").textContent = e.length + " locker" + (e.length === 1 ? "" : "s") + " in use";
+}
+
+$("bInit").onclick = async () => {
+  const p = $("pw").value;
+  if (!p) return log("w", "Enter a master password first.");
+  kc = await Keychain.init(p); saved = null; secretsTyped.clear(); secretsTyped.add(p);
+  $("vault").textContent = "Locker room ready.\nMaster key made from your password.\nTest item stored to check your password later.\n0 lockers in use.";
+  render(); shield("kdf");
+  log("ok", "Locker room set up. Your password was turned into a strong master key.");
+};
+$("bSet").onclick = async () => {
+  if (needVault()) return;
+  const r = await attempt(() => kc.set($("dom").value, $("val").value));
+  if (r.e) return log("bad", r.e);
+  secretsTyped.add($("dom").value); secretsTyped.add($("val").value); render();
+  log("ok", "Stored " + $("dom").value + " in a hidden locker. Every locker is the same size.");
+};
+$("bGet").onclick = async () => {
+  if (needVault()) return;
+  const r = await attempt(() => kc.get($("dom").value));
+  if (r.e) log("bad", r.e); else if (r.v === null) log("w", "No locker for " + $("dom").value + ".");
+  else log("ok", $("dom").value + " → " + r.v);
+};
+$("bRem").onclick = async () => {
+  if (needVault()) return;
+  const ok = await kc.remove($("dom").value); render();
+  log(ok ? "ok" : "w", ok ? "Emptied " + $("dom").value + "." : "No locker found for " + $("dom").value + ".");
+};
+$("bDump").onclick = async () => {
+  if (needVault()) return;
+  const [repr, sum] = await kc.dump(); saved = { repr, sum };
+  $("dumpOut").textContent = "Packed " + Object.keys(kc.data.kvs).length + " locked locker(s).\nYour master password and keys are not included."; $("sum").textContent = sum;
+  const leaks = [...secretsTyped].filter(s => s && repr.includes(s));
+  if (leaks.length === 0) { shield("lab"); log("ok", "Nothing readable was packed: no website names, passwords or master password."); }
+  else log("bad", "Readable data found in the pack: " + leaks.join(", "));
+};
+$("bLoad").onclick = async () => {
+  if (!saved) return log("w", "Pack up first (step 3).");
+  const useSum = $("useSum").checked;
+  const r = await attempt(() => Keychain.load($("lpw").value, saved.repr, useSum ? saved.sum : undefined));
+  if (r.e) return log("w", "Could not open: " + r.e);
+  kc = r.v; render();
+  log("ok", "Opened. Password correct" + (useSum ? " and receipt matched." : " (receipt not used)."));
+};
+
+/* ---------- attack lab ---------- */
+const M = "demo-master-pw";
+async function run(n, shieldKey, fn) {
+  const badge = $("r" + n); badge.textContent = "Running…"; badge.className = "badge";
+  const [blocked, msg] = await fn();
+  badge.textContent = (blocked ? "Stopped. " : "Not stopped. ") + msg;
+  badge.className = "badge " + (blocked ? "ok" : "bad");
+  log(blocked ? "ok" : "bad", msg);
+  if (blocked) shield(shieldKey);
+}
+$("a1").onclick = () => run(1, "swap", async () => {
+  const k = await Keychain.init(M);
+  await k.set("www.google.com", "google-secret"); await k.set("www.evil.com", "evil-secret");
+  const o = JSON.parse((await k.dump())[0]); const [a, b] = Object.keys(o.kvs);
+  [o.kvs[a], o.kvs[b]] = [o.kvs[b], o.kvs[a]];
+  const l = await Keychain.load(M, JSON.stringify(o));            // no checksum on purpose
+  const r = await attempt(() => l.get("www.evil.com"));
+  return [!!r.e, r.e ? "Swap caught even without a receipt (" + r.e + ")." : "Swap went undetected."];
+});
+$("a2").onclick = () => run(2, "roll", async () => {
+  const k = await Keychain.init(M);
+  await k.set("www.google.com", "old_password"); const old = (await k.dump())[0];
+  await k.set("www.google.com", "new_password"); const newSum = (await k.dump())[1];
+  const r = await attempt(() => Keychain.load(M, old, newSum));
+  return [!!r.e, r.e ? "Old copy rejected (" + r.e + ")." : "Rollback went undetected."];
+});
+$("a3").onclick = () => run(3, "tam", async () => {
+  const names = ["a.com", "b.com", "c.com"], k = await Keychain.init(M);
+  for (const d of names) await k.set(d, "pw-" + d);
+  const o = JSON.parse((await k.dump())[0]); const key = Object.keys(o.kvs)[0];
+  const c = decodeBuffer(o.kvs[key].ct); c[0] ^= 1; o.kvs[key].ct = encodeBuffer(c);
+  const l = await Keychain.load(M, JSON.stringify(o)); let n = 0;
+  for (const d of names) if ((await attempt(() => l.get(d))).e) n++;
+  return [n === 1, n === 1 ? "Exactly the one damaged locker was detected." : n + " lockers flagged, expected 1."];
+});
+$("a4").onclick = () => run(4, "kdf", async () => {
+  const k = await Keychain.init(M); const [repr, sum] = await k.dump();
+  const r = await attempt(() => Keychain.load("wrong guess", repr, sum));
+  return [!!r.e, r.e ? "Wrong password rejected even though the locker room is empty (" + r.e + ")." : "Wrong password accepted."];
+});
+$("a5").onclick = () => run(5, "pad", async () => {
+  const k = await Keychain.init(M);
+  await k.set("short.com", "a"); await k.set("long.com", "x".repeat(64));
+  const s = Object.values(k.data.kvs).map(r => decodeBuffer(r.ct).length);
+  return [s[0] === s[1], "A 1 and a 64 character password take " + s[0] + " and " + s[1] + " units."];
+});
+
+if (!window.crypto || !crypto.subtle) log("bad", "This browser blocked the security tools. Open the page through a local server (see the guide).");
+else log("i", "Ready. Start with step 1.");
+</script>
+</body>
+</html>
